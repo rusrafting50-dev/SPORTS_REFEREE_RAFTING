@@ -5,6 +5,8 @@ import os
 from io import BytesIO
 
 import docx
+import docx.text.paragraph
+import docx.text.run
 from docx.oxml.ns import qn
 from docx.table import _Cell
 
@@ -99,6 +101,42 @@ def _date_parts(value):
     return value.strftime("%d"), value.strftime("%m"), value.strftime("%Y")
 
 
+def _replace_photo(document, judge):
+    """В образце-шаблоне уже вставлена фотография другого судьи — убираем её и,
+    если у судьи есть своя фотография, вставляем её на то же место (вписывая в
+    прежнюю рамку с сохранением пропорций)."""
+    drawings = document.element.body.findall(".//" + qn("w:drawing"))
+    if not drawings:
+        return
+    drawing = drawings[0]
+    extent = drawing.find(".//" + qn("wp:extent"))
+    box_w, box_h = int(extent.get("cx")), int(extent.get("cy"))
+    run_el = drawing.getparent()
+    run = docx.text.run.Run(run_el, docx.text.paragraph.Paragraph(run_el.getparent(), document._body))
+    blip = drawing.find(".//" + qn("a:blip"))
+    old_rid = blip.get(qn("r:embed")) if blip is not None else None
+    run_el.remove(drawing)
+    if old_rid:
+        # убираем и саму чужую картинку из пакета, а не только её отображение
+        document.part.drop_rel(old_rid)
+
+    filename = getattr(judge, "photo_filename", None)
+    if not filename:
+        return
+    path = os.path.join(BASE_DIR, "static", "uploads", "judges", filename)
+    if not os.path.exists(path):
+        return
+    try:
+        from PIL import Image
+        with Image.open(path) as img:
+            img_w, img_h = img.size
+        scale = min(box_w / img_w, box_h / img_h)
+        run.add_picture(path, width=int(img_w * scale), height=int(img_h * scale))
+    except Exception:
+        # фото повреждено / не читается — карточка остаётся без фотографии
+        pass
+
+
 def generate_judge_card(judge, settings, subject):
     """subject — субъект РФ судьи (Subject.name == judge.region), хранит
     организацию, осуществляющую учёт судейской деятельности именно в
@@ -187,6 +225,8 @@ def generate_judge_card(judge, settings, subject):
         _set_text(tr1, 5, table2, record.record_keeper)
 
     _replace_repeating_rows(table2, 1, 2, judge.competition_records, fill_competition_group)
+
+    _replace_photo(document, judge)
 
     buffer = BytesIO()
     document.save(buffer)
