@@ -1,34 +1,40 @@
 @echo off
-cd /d "D:\Projects Claude Code\SPORTS_REFEREE"
-git config merge.ff false
-set GIT_MERGE_AUTOEDIT=no
+rem Work in the folder where this .bat lives (no hardcoded path)
+cd /d "%~dp0"
+
+set PORT=5002
 
 if "%~1"=="--relaunched" goto :run
 
-echo [1/4] Stop Flask (port 5002)...
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr :5002 ^| findstr LISTENING') do taskkill /f /pid %%p 1>nul 2>nul
+echo [1/4] Stop Flask (port %PORT%)...
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING') do taskkill /f /pid %%p 1>nul 2>nul
 timeout /t 2 /nobreak >nul
 
-echo [2/4] Git pull...
-git checkout --theirs templates/ 2>nul
-git add templates/ 2>nul
-git commit -m "Auto-resolve conflicts" 2>nul
-git pull --no-edit origin main
-git checkout --theirs templates/ 2>nul
-git add templates/ 2>nul
-git commit -m "Auto-resolve post-pull conflicts" --no-edit 2>nul
+echo [2/4] Git update (branch main)...
+git checkout main
+if errorlevel 1 goto :git_error
+git fetch origin main
+if errorlevel 1 goto :git_error
+git merge --no-edit origin/main
+if errorlevel 1 goto :git_error
 
-rem git pull мог изменить сам этот .bat-файл — перезапускаемся новым
-rem процессом, чтобы дочитать файл с диска заново, а не со старого
-rem (теперь невалидного) смещения в этом же процессе cmd.exe.
+rem git may have changed this .bat itself - relaunch as a new process
 start "" "%~f0" --relaunched
 exit /b
+
+:git_error
+echo.
+echo *** Git update FAILED - the server was NOT started. ***
+echo Check the messages above: local uncommitted changes or merge conflicts.
+echo Run "git status" in %CD% to see details.
+pause
+exit /b 1
 
 :run
 echo [3/4] pip install...
 pip install -r requirements.txt --quiet
 
 echo [4/4] Start Flask...
-start http://localhost:5002
+start http://localhost:%PORT%
 python app.py
 pause
