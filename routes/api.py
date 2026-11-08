@@ -18,6 +18,8 @@ import os
 from datetime import datetime
 from functools import wraps
 
+from datetime import date
+
 from flask import Blueprint, jsonify, request
 
 import references
@@ -290,6 +292,7 @@ def competition_import():
                         judge_id=judge.id,
                         category=full_category,
                         action="присвоена",
+                        date=date.today(),
                     ))
             created += 1
 
