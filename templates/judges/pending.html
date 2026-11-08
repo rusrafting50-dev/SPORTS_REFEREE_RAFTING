@@ -13,7 +13,7 @@
             <th>Фамилия, имя, отчество</th>
             <th>Дата рождения</th>
             <th>Субъект РФ</th>
-            <th>Квалификация спортивного судьи</th>
+            <th>Квалификация<br>спортивного<br>судьи</th>
             <th></th>
         </tr>
     </thead>
@@ -21,9 +21,9 @@
         {% for judge in judges %}
         <tr>
             <td class="text-center">{{ loop.index }}</td>
-            <td>{{ judge.full_name }}</td>
+            <td class="text-nowrap">{{ judge.full_name }}</td>
             <td class="text-center">{{ judge.birth_date.strftime('%d.%m.%Y') if judge.birth_date }}</td>
-            <td class="text-center">{{ judge.region }}</td>
+            <td class="text-center text-nowrap">{{ judge.region }}</td>
             <td class="text-center">{{ judge.current_category|category_abbr }}</td>
             <td class="text-center text-nowrap">
               <div class="d-flex gap-1 justify-content-center">

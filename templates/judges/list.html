@@ -44,7 +44,7 @@
             <th>Дата рождения</th>
             <th>Субъект РФ</th>
             <th>Муниципальное образование</th>
-            <th>Квалификация спортивного судьи</th>
+            <th>Квалификация<br>спортивного<br>судьи</th>
             <th>Специализация</th>
         </tr>
     </thead>
@@ -52,9 +52,9 @@
         {% for judge in judges %}
         <tr {% if highlight_active and judge.is_active %}class="table-success"{% endif %}>
             <td class="text-center text-nowrap">{{ loop.index }}</td>
-            <td><a href="{{ url_for('judges.judges_detail', judge_id=judge.id) }}">{{ judge.full_name }}</a></td>
+            <td class="text-nowrap"><a href="{{ url_for('judges.judges_detail', judge_id=judge.id) }}">{{ judge.full_name }}</a></td>
             <td class="text-center">{{ judge.birth_date.strftime('%d.%m.%Y') if judge.birth_date }}</td>
-            <td class="text-center">{{ judge.region }}</td>
+            <td class="text-center text-nowrap">{{ judge.region }}</td>
             <td class="text-center">{{ judge.municipality }}</td>
             <td class="text-center">{{ judge.current_category|category_abbr }}</td>
             <td class="text-center">{{ judge.specialization }}</td>
