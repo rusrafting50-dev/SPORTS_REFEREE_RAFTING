@@ -46,7 +46,6 @@
             <th>Муниципальное образование</th>
             <th>Квалификационная категория</th>
             <th>Специализация</th>
-            <th>Группа спортивных дисциплин</th>
         </tr>
     </thead>
     <tbody>
@@ -59,11 +58,10 @@
             <td class="text-center">{{ judge.municipality }}</td>
             <td class="text-center">{{ judge.current_category|category_abbr }}</td>
             <td class="text-center">{{ judge.specialization }}</td>
-            <td class="text-center">{{ judge.discipline_group }}</td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="8" class="text-center text-muted">Список пуст</td>
+            <td colspan="7" class="text-center text-muted">Список пуст</td>
         </tr>
         {% endfor %}
     </tbody>
