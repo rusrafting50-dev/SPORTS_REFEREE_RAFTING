@@ -267,13 +267,24 @@ def competition_import():
             q = q.filter(Judge.birth_date == birth_date)
         judge = q.first()
 
+        qualification = (j.get("qualification") or "").strip()
+        region = (j.get("region") or "").strip()
+
         if judge:
             matched += 1
             if not judge.is_active and not judge.imported_pending:
                 judge.imported_pending = True
+            # Добавляем категорию, если её ещё нет
+            if qualification and not judge.current_category:
+                full_category = references.JUDGE_CATEGORY_ABBREVIATIONS.get(qualification)
+                if full_category:
+                    db.session.add(JudgeCategoryRecord(
+                        judge_id=judge.id,
+                        category=full_category,
+                        action="присвоена",
+                        date=date.today(),
+                    ))
         else:
-            qualification = (j.get("qualification") or "").strip()
-            region = (j.get("region") or "").strip()
             judge = Judge(
                 last_name=last_name,
                 first_name=first_name,
