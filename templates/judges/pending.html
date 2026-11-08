@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Из COREZ — Спортивные судьи{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">{{ heading }}</h1>
+</div>
+
+<div class="table-responsive">
+<table class="table table-sm table-striped table-bordered align-middle">
+    <thead>
+        <tr class="text-center align-middle">
+            <th>№<br>п/п</th>
+            <th>Фамилия, имя, отчество</th>
+            <th>Дата рождения</th>
+            <th>Субъект РФ</th>
+            <th>Квалификационная категория</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for judge in judges %}
+        <tr>
+            <td class="text-center">{{ loop.index }}</td>
+            <td>{{ judge.full_name }}</td>
+            <td class="text-center">{{ judge.birth_date.strftime('%d.%m.%Y') if judge.birth_date }}</td>
+            <td class="text-center">{{ judge.region }}</td>
+            <td class="text-center">{{ judge.current_category|category_abbr }}</td>
+            <td class="text-center text-nowrap">
+              <div class="d-flex gap-1 justify-content-center">
+                <form method="post" action="{{ url_for('judges.judges_include_in_list', judge_id=judge.id) }}">
+                  <button class="btn btn-success btn-sm">Включить</button>
+                </form>
+                <form method="post" action="{{ url_for('judges.judges_delete_pending', judge_id=judge.id) }}"
+                      onsubmit="return confirm('Удалить {{ judge.full_name|e }} из списка на рассмотрении?')">
+                  <button class="btn btn-outline-danger btn-sm">Удалить</button>
+                </form>
+              </div>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="6" class="text-center text-muted">Список пуст</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

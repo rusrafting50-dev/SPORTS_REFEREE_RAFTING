@@ -91,6 +91,7 @@ class Judge(db.Model):
     photo_filename = db.Column(db.String(300))  # имя файла фотографии в static/uploads/judges/
 
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    imported_pending = db.Column(db.Boolean, default=False)  # импортирован из COREZ, ожидает проверки
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

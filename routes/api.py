@@ -21,7 +21,7 @@ from functools import wraps
 from flask import Blueprint, jsonify, request
 
 import references
-from models import Judge, Seminar, SeminarApplication, SeminarApplicationParticipant, db
+from models import Judge, JudgeCategoryRecord, Seminar, SeminarApplication, SeminarApplicationParticipant, db
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -222,6 +222,79 @@ def _judge_to_corez_dict(judge):
         "конец_аттестации": "",
         "номер_в_базе": judge.id,
     }
+
+
+@bp.route("/competition/import", methods=["POST"])
+@require_api_key
+def competition_import():
+    """Принимает список судей из судейской коллегии COREZ.
+    Найденным в базе ставит imported_pending=True (если ещё не активны);
+    не найденным создаёт новую запись Judge (is_active=False, imported_pending=True).
+
+    Тело запроса (JSON):
+      competition_name  — название соревнования
+      judges            — [{full_name, qualification (аббревиатура), birth_date (ISO), region}, …]
+
+    Ответ: {matched, created}
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Ожидается JSON."}), 400
+
+    judges_data = data.get("judges") or []
+    matched = 0
+    created = 0
+
+    for j in judges_data:
+        full_name = (j.get("full_name") or "").strip()
+        if not full_name:
+            continue
+
+        parts = full_name.split(None, 2)
+        last_name  = parts[0]
+        first_name = parts[1] if len(parts) > 1 else ""
+        middle_name = parts[2] if len(parts) > 2 else ""
+
+        birth_date = _parse_date(j.get("birth_date"))
+
+        q = Judge.query.filter(
+            Judge.last_name.ilike(last_name),
+            Judge.first_name.ilike(first_name),
+        )
+        if birth_date:
+            q = q.filter(Judge.birth_date == birth_date)
+        judge = q.first()
+
+        if judge:
+            matched += 1
+            if not judge.is_active and not judge.imported_pending:
+                judge.imported_pending = True
+        else:
+            qualification = (j.get("qualification") or "").strip()
+            region = (j.get("region") or "").strip()
+            judge = Judge(
+                last_name=last_name,
+                first_name=first_name,
+                middle_name=middle_name or None,
+                birth_date=birth_date,
+                region=region or None,
+                is_active=False,
+                imported_pending=True,
+            )
+            db.session.add(judge)
+            db.session.flush()
+            if qualification:
+                full_category = references.JUDGE_CATEGORY_ABBREVIATIONS.get(qualification)
+                if full_category:
+                    db.session.add(JudgeCategoryRecord(
+                        judge_id=judge.id,
+                        category=full_category,
+                        action="присвоена",
+                    ))
+            created += 1
+
+    db.session.commit()
+    return jsonify({"matched": matched, "created": created})
 
 
 @bp.route("/judges/search", methods=["GET"])

@@ -150,11 +150,13 @@ def judges_list():
         query = query.filter_by(specialization=specialization)
     judges = query.order_by(Judge.last_name).all()
 
+    pending_count = Judge.query.filter_by(imported_pending=True).count()
     return render_template(
         "judges/list.html", judges=judges, heading="Список спортивных судей",
         list_buttons=JUDGE_CATEGORY_TYPES, show_add_button=True, highlight_active=False,
         filters={"specialization": specialization},
         specialization_options=references.JUDGE_SPECIALIZATIONS,
+        pending_count=pending_count,
     )
 
 
@@ -344,6 +346,46 @@ def judges_edit(judge_id):
         flash("Изменения сохранены", "success")
         return redirect(url_for("judges.judges_detail", judge_id=judge.id))
     return render_template("judges/form.html", judge=judge, references=references)
+
+
+@bp.route("/pending")
+def judges_pending():
+    """Импортированные из COREZ судьи (imported_pending=True) — на рассмотрении."""
+    pending_count = Judge.query.filter_by(imported_pending=True).count()
+    judges = Judge.query.filter_by(imported_pending=True).order_by(Judge.last_name).all()
+    return render_template(
+        "judges/pending.html", judges=judges,
+        heading="На рассмотрении (импортированные из COREZ)",
+        pending_count=pending_count,
+    )
+
+
+@bp.route("/<int:judge_id>/include-in-list", methods=["POST"])
+def judges_include_in_list(judge_id):
+    """Включить импортированного из COREZ судью в список."""
+    judge = Judge.query.get_or_404(judge_id)
+    if not judge.imported_pending:
+        flash("Судья не находится в списке на рассмотрении.", "warning")
+        return redirect(url_for("judges.judges_pending"))
+    judge.imported_pending = False
+    judge.is_active = True
+    db.session.commit()
+    flash(f"{judge.full_name} включён в список.", "success")
+    return redirect(url_for("judges.judges_pending"))
+
+
+@bp.route("/<int:judge_id>/delete-pending", methods=["POST"])
+def judges_delete_pending(judge_id):
+    """Удалить судью, импортированного из COREZ (imported_pending=True)."""
+    judge = Judge.query.get_or_404(judge_id)
+    if not judge.imported_pending:
+        flash("Судья не находится в списке на рассмотрении.", "warning")
+        return redirect(url_for("judges.judges_pending"))
+    name = judge.full_name
+    db.session.delete(judge)
+    db.session.commit()
+    flash(f"{name} удалён.", "warning")
+    return redirect(url_for("judges.judges_pending"))
 
 
 @bp.route("/<int:judge_id>/deactivate", methods=["POST"])
