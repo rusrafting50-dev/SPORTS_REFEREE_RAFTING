@@ -57,7 +57,12 @@ def parse_judge_card(file_obj):
     """Разбирает docx-карточку учёта судейской деятельности и возвращает
     новый объект Judge со связанными записями истории (без сохранения в БД)."""
     document = docx.Document(file_obj)
-    table0, table1, table2 = document.tables[0], document.tables[1], document.tables[2]
+    tables = document.tables
+    if len(tables) < 1:
+        raise ValueError(f"В документе не найдено таблиц (найдено: {len(tables)})")
+    table0 = tables[0]
+    table1 = tables[1] if len(tables) > 1 else None
+    table2 = tables[2] if len(tables) > 2 else None
 
     judge = Judge(
         last_name=_cell(table0, 2, 1),
@@ -90,61 +95,63 @@ def parse_judge_card(file_obj):
     # --- Теоретическая подготовка (table1, с 2-й строки, группы по 3 строки) ---
     # В стандартном образце 13 столбцов (со столбцом "Дата" участника), в карточках,
     # выгруженных этим приложением, — 12 (столбец убран из отображения).
-    has_participant_date = len(table1.columns) >= 13
-    for row in range(2, len(table1.rows), 3):
-        if row + 2 >= len(table1.rows):
-            break
-        if _row_blank(table1, row, range(6)):
-            continue
-        if has_participant_date:
-            judge.training_records.append(JudgeTrainingRecord(
-                seminar_name=_cell(table1, row, 0) or None,
-                seminar_date=_cell(table1, row, 1) or None,
-                organizer=_cell(table1, row, 2) or None,
-                location=_cell(table1, row, 3) or None,
-                participant_category=_cell(table1, row, 4) or None,
-                participant_score=_cell(table1, row, 5) or None,
-                participant_date=_cell(table1, row, 6) or None,
-                lecturer_category=_cell(table1, row, 7) or None,
-                lecturer_score=_cell(table1, row, 8) or None,
-                lecturer_date=_cell(table1, row, 9) or None,
-                exam_protocol_number=_cell(table1, row, 10) or None,
-                exam_score=_cell(table1, row, 11) or None,
-                record_date=_cell(table1, row, 12) or None,
-                record_keeper=_cell(table1, row + 2, 12) or None,
-            ))
-        else:
-            judge.training_records.append(JudgeTrainingRecord(
-                seminar_name=_cell(table1, row, 0) or None,
-                seminar_date=_cell(table1, row, 1) or None,
-                organizer=_cell(table1, row, 2) or None,
-                location=_cell(table1, row, 3) or None,
-                participant_category=_cell(table1, row, 4) or None,
-                participant_score=_cell(table1, row, 5) or None,
-                lecturer_category=_cell(table1, row, 6) or None,
-                lecturer_score=_cell(table1, row, 7) or None,
-                lecturer_date=_cell(table1, row, 8) or None,
-                exam_protocol_number=_cell(table1, row, 9) or None,
-                exam_score=_cell(table1, row, 10) or None,
-                record_date=_cell(table1, row, 11) or None,
-                record_keeper=_cell(table1, row + 2, 11) or None,
-            ))
+    if table1 is not None:
+        has_participant_date = len(table1.columns) >= 13
+        for row in range(2, len(table1.rows), 3):
+            if row + 2 >= len(table1.rows):
+                break
+            if _row_blank(table1, row, range(6)):
+                continue
+            if has_participant_date:
+                judge.training_records.append(JudgeTrainingRecord(
+                    seminar_name=_cell(table1, row, 0) or None,
+                    seminar_date=_cell(table1, row, 1) or None,
+                    organizer=_cell(table1, row, 2) or None,
+                    location=_cell(table1, row, 3) or None,
+                    participant_category=_cell(table1, row, 4) or None,
+                    participant_score=_cell(table1, row, 5) or None,
+                    participant_date=_cell(table1, row, 6) or None,
+                    lecturer_category=_cell(table1, row, 7) or None,
+                    lecturer_score=_cell(table1, row, 8) or None,
+                    lecturer_date=_cell(table1, row, 9) or None,
+                    exam_protocol_number=_cell(table1, row, 10) or None,
+                    exam_score=_cell(table1, row, 11) or None,
+                    record_date=_cell(table1, row, 12) or None,
+                    record_keeper=_cell(table1, row + 2, 12) or None,
+                ))
+            else:
+                judge.training_records.append(JudgeTrainingRecord(
+                    seminar_name=_cell(table1, row, 0) or None,
+                    seminar_date=_cell(table1, row, 1) or None,
+                    organizer=_cell(table1, row, 2) or None,
+                    location=_cell(table1, row, 3) or None,
+                    participant_category=_cell(table1, row, 4) or None,
+                    participant_score=_cell(table1, row, 5) or None,
+                    lecturer_category=_cell(table1, row, 6) or None,
+                    lecturer_score=_cell(table1, row, 7) or None,
+                    lecturer_date=_cell(table1, row, 8) or None,
+                    exam_protocol_number=_cell(table1, row, 9) or None,
+                    exam_score=_cell(table1, row, 10) or None,
+                    record_date=_cell(table1, row, 11) or None,
+                    record_keeper=_cell(table1, row + 2, 11) or None,
+                ))
 
     # --- Практика судейства официальных спортивных соревнований (table2, с 1-й строки, группы по 2 строки) ---
-    for row in range(1, len(table2.rows), 2):
-        if row + 1 >= len(table2.rows):
-            break
-        if _row_blank(table2, row, range(3)):
-            continue
-        judge.competition_records.append(JudgeCompetitionRecord(
-            event_date=_cell(table2, row, 0) or None,
-            location=_cell(table2, row, 1) or None,
-            judge_position=_cell(table2, row, 2) or None,
-            competition_name=_cell(table2, row, 3) or None,
-            score=_cell(table2, row, 4) or None,
-            record_date=_cell(table2, row, 5) or None,
-            competition_status=_cell(table2, row + 1, 3) or None,
-            record_keeper=_cell(table2, row + 1, 5) or None,
-        ))
+    if table2 is not None:
+        for row in range(1, len(table2.rows), 2):
+            if row + 1 >= len(table2.rows):
+                break
+            if _row_blank(table2, row, range(3)):
+                continue
+            judge.competition_records.append(JudgeCompetitionRecord(
+                event_date=_cell(table2, row, 0) or None,
+                location=_cell(table2, row, 1) or None,
+                judge_position=_cell(table2, row, 2) or None,
+                competition_name=_cell(table2, row, 3) or None,
+                score=_cell(table2, row, 4) or None,
+                record_date=_cell(table2, row, 5) or None,
+                competition_status=_cell(table2, row + 1, 3) or None,
+                record_keeper=_cell(table2, row + 1, 5) or None,
+            ))
 
     return judge
