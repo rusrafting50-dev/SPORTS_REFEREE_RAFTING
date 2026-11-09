@@ -92,11 +92,12 @@ def parse_judge_card(file_obj):
     )
 
     # --- История квалификационных категорий ---
-    # 3-табл.: раздел внутри table0, строки 14+; 4-табл.: отдельная tbl_cat, строки 1+
+    # 3-табл.: раздел внутри table0, строки 14+
+    # 4-табл.: отдельная таблица — строки 0 и 1 шапка, данные с 2-й
     if tbl_cat is None:
         cat_table, cat_start = table0, 14
     else:
-        cat_table, cat_start = tbl_cat, 1
+        cat_table, cat_start = tbl_cat, 2
     for row in range(cat_start, len(cat_table.rows)):
         if _row_blank(cat_table, row, range(7)):
             continue
@@ -110,12 +111,15 @@ def parse_judge_card(file_obj):
             record_keeper=_cell(cat_table, row, 6) or None,
         ))
 
-    # --- Теоретическая подготовка (table1, с 2-й строки, группы по 3 строки) ---
+    # --- Теоретическая подготовка (группы по 3 строки) ---
+    # 3-табл.: данные с row 2 (шапка занимает строки 0–1)
+    # 4-табл.: отдельная таблица — шапка строки 0–2, данные с row 3
     # В стандартном образце 13 столбцов (со столбцом "Дата" участника), в карточках,
     # выгруженных этим приложением, — 12 (столбец убран из отображения).
     if tbl_train is not None:
+        train_start = 3 if tbl_cat is not None else 2
         has_participant_date = len(tbl_train.columns) >= 13
-        for row in range(2, len(tbl_train.rows), 3):
+        for row in range(train_start, len(tbl_train.rows), 3):
             if row + 2 >= len(tbl_train.rows):
                 break
             if _row_blank(tbl_train, row, range(6)):
