@@ -102,38 +102,57 @@ def _date_parts(value):
 
 
 def _replace_photo(document, judge):
-    """В образце-шаблоне уже вставлена фотография другого судьи — убираем её и,
-    если у судьи есть своя фотография, вставляем её на то же место (вписывая в
-    прежнюю рамку с сохранением пропорций)."""
-    drawings = document.element.body.findall(".//" + qn("w:drawing"))
-    if not drawings:
+    """Заменяет фото шаблона на фото судьи, подменяя r:embed прямо в a:blip.
+    Не трогает структуру XML — работает корректно даже при mc:AlternateContent."""
+    # Первый a:blip в теле документа — это и есть фото шаблона
+    blip = document.element.body.find(".//" + qn("a:blip"))
+    if blip is None:
         return
-    drawing = drawings[0]
-    extent = drawing.find(".//" + qn("wp:extent"))
-    box_w, box_h = int(extent.get("cx")), int(extent.get("cy"))
-    run_el = drawing.getparent()
-    run = docx.text.run.Run(run_el, docx.text.paragraph.Paragraph(run_el.getparent(), document._body))
-    blip = drawing.find(".//" + qn("a:blip"))
-    old_rid = blip.get(qn("r:embed")) if blip is not None else None
-    run_el.remove(drawing)
-    if old_rid:
-        # убираем и саму чужую картинку из пакета, а не только её отображение
-        document.part.drop_rel(old_rid)
+    old_rid = blip.get(qn("r:embed"))
 
     filename = getattr(judge, "photo_filename", None)
-    if not filename:
+    path = os.path.join(BASE_DIR, "static", "uploads", "judges", filename) if filename else None
+    if not path or not os.path.exists(path):
+        # Нет фото — убираем drawing из XML
+        drawing = blip
+        while drawing is not None and drawing.tag != qn("w:drawing"):
+            drawing = drawing.getparent()
+        if drawing is not None:
+            drawing.getparent().remove(drawing)
+        if old_rid:
+            try:
+                document.part.drop_rel(old_rid)
+            except Exception:
+                pass
         return
-    path = os.path.join(BASE_DIR, "static", "uploads", "judges", filename)
-    if not os.path.exists(path):
-        return
+
     try:
         from PIL import Image
-        with Image.open(path) as img:
-            img_w, img_h = img.size
-        scale = min(box_w / img_w, box_h / img_h)
-        run.add_picture(path, width=int(img_w * scale), height=int(img_h * scale))
+        # Корректируем размер в extent под реальные пропорции фото
+        drawing = blip
+        while drawing is not None and drawing.tag != qn("w:drawing"):
+            drawing = drawing.getparent()
+        if drawing is not None:
+            extent = drawing.find(".//" + qn("wp:extent"))
+            if extent is not None:
+                with Image.open(path) as img:
+                    img_w, img_h = img.size
+                box_w, box_h = int(extent.get("cx")), int(extent.get("cy"))
+                scale = min(box_w / img_w, box_h / img_h)
+                extent.set("cx", str(int(img_w * scale)))
+                extent.set("cy", str(int(img_h * scale)))
+
+        # Добавляем картинку в пакет и получаем её relationship ID
+        _, new_rid = document.part.get_or_add_image(path)
+        # Подменяем ссылку прямо в blip — структура XML остаётся нетронутой
+        blip.set(qn("r:embed"), new_rid)
+        # Удаляем старое изображение шаблона
+        if old_rid and old_rid != new_rid:
+            try:
+                document.part.drop_rel(old_rid)
+            except Exception:
+                pass
     except Exception:
-        # фото повреждено / не читается — карточка остаётся без фотографии
         pass
 
 
