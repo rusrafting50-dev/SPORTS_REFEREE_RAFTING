@@ -7,7 +7,7 @@ from markupsafe import Markup, escape
 from sqlalchemy import inspect, text
 
 import references
-from models import LocalBranch, Settings, Subject, db
+from models import LocalBranch, SchemaFlag, Settings, Subject, db
 from routes.api import bp as api_bp
 from routes.judges import bp as judges_bp
 from routes.seminars import bp as seminars_bp
@@ -99,6 +99,37 @@ def _sync_missing_columns():
                 conn.commit()
 
 
+def _перенести_екп_и_баллы():
+    """Одноразово: «№ в ЕКП / КП» и «Баллы» больше не отдельные поля практики
+    судейства — номер пишется в наименовании соревнования, баллы вместе с
+    оценкой. Уже внесённые значения дописываются туда; старые колонки
+    остаются в БД, но не используются."""
+    флаг = "competition_ekp_points_merged"
+    if SchemaFlag.query.get(флаг):
+        return
+    columns = {c["name"] for c in inspect(db.engine).get_columns("judge_competition_record")}
+    if {"ekp_number", "points"} <= columns:
+        rows = db.session.execute(text(
+            "SELECT id, competition_name, score, ekp_number, points FROM judge_competition_record "
+            "WHERE COALESCE(ekp_number, '') != '' OR COALESCE(points, '') != ''"
+        )).all()
+        for rec_id, name, score, ekp, points in rows:
+            name, score, ekp, points = (x.strip() if x else "" for x in (name, score, ekp, points))
+            if ekp and ekp not in name:
+                name = f"{name}, {ekp}" if name else ekp
+            if points.isdigit():
+                points = f"{points} {ru_plural(int(points), 'балл', 'балла', 'баллов')}"
+            if points and points not in score:
+                score = f"{score}, {points}" if score else points
+            db.session.execute(
+                text("UPDATE judge_competition_record SET competition_name = :n, score = :s, "
+                     "ekp_number = NULL, points = NULL WHERE id = :id"),
+                {"n": name or None, "s": score or None, "id": rec_id},
+            )
+    db.session.add(SchemaFlag(key=флаг))
+    db.session.commit()
+
+
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = "dev-secret-key"
@@ -121,6 +152,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _sync_missing_columns()
+        _перенести_екп_и_баллы()
         обеспечить_субъекты_цфо()
         убрать_лишние_субъекты_цфо()
 
@@ -186,6 +218,8 @@ def create_app():
         subject.organization_name = request.form.get("organization_name", "").strip()
         subject.organization_address = request.form.get("organization_address", "").strip()
         subject.organization_contacts = request.form.get("organization_contacts", "").strip()
+        subject.organization_leader_position = request.form.get("organization_leader_position", "").strip()
+        subject.organization_leader_name = request.form.get("organization_leader_name", "").strip()
         db.session.commit()
         flash(f"Субъект «{name}» сохранён", "success")
         return redirect(url_for("settings"))
@@ -281,4 +315,4 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5005)
+    app.run(debug=True, port=int(os.environ.get("PORT", 5005)))

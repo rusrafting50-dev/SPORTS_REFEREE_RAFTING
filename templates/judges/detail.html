@@ -21,6 +21,7 @@
         </div>
         <div class="d-flex gap-2">
             <a href="{{ url_for('judges.judges_export', judge_id=judge.id) }}" class="btn btn-success">Скачать карточку</a>
+            <a href="{{ url_for('judges.judges_nomination', judge_id=judge.id) }}" class="btn btn-success">Скачать представление</a>
             <form method="post" action="{{ url_for('judges.judges_send_to_site', judge_id=judge.id) }}" class="d-inline">
                 <button type="submit" class="btn btn-outline-success">Отправить на сайт</button>
             </form>
@@ -59,6 +60,7 @@
             <tr><th>Образование</th><td>{{ judge.education }}</td></tr>
             <tr><th>Место работы (учёбы), должность</th><td>{{ judge.workplace }}</td></tr>
             <tr><th>Контактные телефоны, адрес электронной почты</th><td>{{ judge.contacts }}</td></tr>
+            <tr><th>Адрес (место жительства)</th><td>{{ judge.address }}</td></tr>
             <tr><th>Дата начала судейской деятельности</th><td>{{ judge.judging_start_date.strftime('%d.%m.%Y') if judge.judging_start_date }}</td></tr>
             <tr><th>Текущая квалификационная категория</th><td>{{ judge.current_category }}</td></tr>
             <tr><th>Специализация</th><td>{{ judge.specialization }}</td></tr>
@@ -267,6 +269,12 @@
                     <form method="post" action="{{ url_for('judges.training_record_delete', record_id=record.id) }}" onsubmit="return confirm('Удалить эту запись?');">
                         <button type="submit" class="btn btn-sm btn-outline-danger w-100">Удалить</button>
                     </form>
+                    <label class="d-flex align-items-center justify-content-center gap-1 small" title="Включить семинар в «Представление к присвоению категории»">
+                        <input type="checkbox" class="form-check-input m-0 nomination-toggle"
+                               data-url="{{ url_for('judges.training_record_nomination', record_id=record.id) }}"
+                               {% if record.included_in_nomination %}checked{% endif %}>
+                        В представление
+                    </label>
                 </div>
             </td>
         </tr>
@@ -279,10 +287,10 @@
                     <div><label class="form-label mb-0">Место проведения</label><input type="text" name="location" class="form-control form-control-sm" value="{{ record.location or '' }}"></div>
                     <div><label class="form-label mb-0">Квалификация (участник)</label><input type="text" name="participant_category" class="form-control form-control-sm" value="{{ record.participant_category or '' }}"></div>
                     <div><label class="form-label mb-0">Оценка (участник)</label><input type="text" name="participant_score" class="form-control form-control-sm" value="{{ record.participant_score or '' }}"></div>
-                    <div><label class="form-label mb-0">Дата (участник)</label><input type="text" name="participant_date" class="form-control form-control-sm" value="{{ record.participant_date or '' }}"></div>
+                    <div><label class="form-label mb-0">Дата (лектор)</label><input type="text" name="participant_date" class="form-control form-control-sm" value="{{ record.participant_date or '' }}"></div>
                     <div><label class="form-label mb-0">Квалификация (лектор)</label><input type="text" name="lecturer_category" class="form-control form-control-sm" value="{{ record.lecturer_category or '' }}"></div>
                     <div><label class="form-label mb-0">Оценка (лектор)</label><input type="text" name="lecturer_score" class="form-control form-control-sm" value="{{ record.lecturer_score or '' }}"></div>
-                    <div><label class="form-label mb-0">Дата (лектор)</label><input type="text" name="lecturer_date" class="form-control form-control-sm" value="{{ record.lecturer_date or '' }}"></div>
+                    <div><label class="form-label mb-0">Дата (зачёт)</label><input type="text" name="lecturer_date" class="form-control form-control-sm" value="{{ record.lecturer_date or '' }}"></div>
                     <div><label class="form-label mb-0">№ протокола зачёта</label><input type="text" name="exam_protocol_number" class="form-control form-control-sm" value="{{ record.exam_protocol_number or '' }}"></div>
                     <div><label class="form-label mb-0">Оценка зачёта</label><input type="text" name="exam_score" class="form-control form-control-sm" value="{{ record.exam_score or '' }}"></div>
                     <div><label class="form-label mb-0">Дата внесения записи</label><input type="text" name="record_date" class="form-control form-control-sm" value="{{ record.record_date or '' }}"></div>
@@ -309,6 +317,7 @@
     <div><label class="form-label mb-0">Оценка (участник)</label><input type="text" name="participant_score" class="form-control form-control-sm"></div>
     <div><label class="form-label mb-0">Квалификация (лектор)</label><input type="text" name="lecturer_category" class="form-control form-control-sm" style="width: 405px;"></div>
     <div class="flex-grow-1"><label class="form-label mb-0">Оценка (лектор)</label><input type="text" name="lecturer_score" class="form-control form-control-sm w-100"></div>
+    <div><label class="form-label mb-0">Дата (лектор)</label><input type="text" name="participant_date" class="form-control form-control-sm"></div>
     <div class="w-100"></div>
     <div><label class="form-label mb-0">Дата (зачёт)</label><input type="text" name="lecturer_date" class="form-control form-control-sm"></div>
     <div><label class="form-label mb-0">№ протокола зачёта</label><input type="text" name="exam_protocol_number" class="form-control form-control-sm"></div>
@@ -330,7 +339,7 @@
         <col style="width: 83px;">
         <col style="width: 90px;">
         <col style="width: 155px;">
-        <col style="width: 90px;">
+        <col style="width: 100px;">
     </colgroup>
     <thead>
         <tr class="align-middle">
@@ -366,6 +375,12 @@
                     <form method="post" action="{{ url_for('judges.competition_record_delete', record_id=record.id) }}" onsubmit="return confirm('Удалить эту запись?');">
                         <button type="submit" class="btn btn-sm btn-outline-danger w-100">Удалить</button>
                     </form>
+                    <label class="d-flex align-items-center justify-content-center gap-1 small" title="Включить соревнование в «Представление к присвоению категории»">
+                        <input type="checkbox" class="form-check-input m-0 nomination-toggle"
+                               data-url="{{ url_for('judges.competition_record_nomination', record_id=record.id) }}"
+                               {% if record.included_in_nomination %}checked{% endif %}>
+                        В представление
+                    </label>
                 </div>
             </td>
         </tr>
@@ -432,6 +447,16 @@ function _fmtDate(val) {
     var m = (val || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return m ? m[3] + '.' + m[2] + '.' + m[1] : val;
 }
+
+document.addEventListener('change', function(e) {
+    var box = e.target;
+    if (!box.classList || !box.classList.contains('nomination-toggle')) return;
+    var body = new FormData();
+    body.append('included', box.checked ? '1' : '0');
+    fetch(box.dataset.url, {method: 'POST', body: body})
+        .then(function(resp) { if (!resp.ok) throw new Error(); })
+        .catch(function() { box.checked = !box.checked; alert('Не удалось сохранить отметку'); });
+});
 
 document.addEventListener('submit', function(e) {
     var form = e.target;

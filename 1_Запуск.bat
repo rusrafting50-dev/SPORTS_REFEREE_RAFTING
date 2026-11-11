@@ -3,6 +3,7 @@ rem Work in the folder where this .bat lives (no hardcoded path)
 cd /d "%~dp0"
 
 set PORT=5005
+if exist .env for /f "usebackq tokens=1,2 delims== " %%a in (".env") do if /i "%%a"=="PORT" set PORT=%%b
 
 if "%~1"=="--relaunched" goto :run
 
