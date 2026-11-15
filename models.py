@@ -245,6 +245,9 @@ class JudgeCompetitionRecord(db.Model):
     # не трогали, тогда включаются соревнования после даты присвоения
     # действующей категории (Judge.previous_category_date)
     in_nomination = db.Column(db.Boolean)
+    # id соревнования в COREZ, из судейской коллегии которого запись пришла
+    # (api.competition_import) — повторная отправка обновляет эту запись
+    corez_competition_id = db.Column(db.Integer)
 
     record_date = db.Column(db.String(50))
     record_keeper = db.Column(db.String(150))

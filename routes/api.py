@@ -23,7 +23,10 @@ from datetime import date
 from flask import Blueprint, jsonify, request
 
 import references
-from models import Judge, JudgeCategoryRecord, Seminar, SeminarApplication, SeminarApplicationParticipant, db
+from models import (
+    Judge, JudgeCategoryRecord, JudgeCompetitionRecord, Seminar, SeminarApplication, SeminarApplicationParticipant, db,
+)
+from seminar_cards import card_dates
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -226,6 +229,47 @@ def _judge_to_corez_dict(judge):
     }
 
 
+def _ekp_in_name(name, ekp):
+    """№ в ЕКП пишется в наименовании соревнования (так его берёт представление)."""
+    ekp = (ekp or "").strip()
+    if not ekp or ekp in name:
+        return name
+    if not any(mark in ekp.upper() for mark in ("ЕКП", "КП")):
+        ekp = f"№ в ЕКП {ekp}"
+    return f"{name}, {ekp}" if name else ekp
+
+
+def _last_competition_keeper(judge):
+    for record in reversed(judge.competition_records):
+        if record.record_keeper:
+            return record.record_keeper
+    return None
+
+
+def _upsert_practice(judge, corez_id, competition, position, today):
+    """Строка «Практики судейства» для этого соревнования COREZ: создаётся,
+    а при повторной отправке обновляется (оценку и отметку «В представление»,
+    внесённые вручную, не трогает). Возвращает True, если строка новая."""
+    query = JudgeCompetitionRecord.query.filter_by(judge_id=judge.id)
+    if corez_id is not None:
+        record = query.filter_by(corez_competition_id=corez_id).first()
+    else:
+        record = query.filter_by(competition_name=competition["name"], event_date=competition["event_date"]).first()
+    is_new = record is None
+    if is_new:
+        record = JudgeCompetitionRecord(
+            judge_id=judge.id, corez_competition_id=corez_id,
+            record_date=today, record_keeper=_last_competition_keeper(judge),
+        )
+        db.session.add(record)
+    record.event_date = competition["event_date"] or record.event_date
+    record.location = competition["location"] or record.location
+    record.competition_name = competition["name"] or record.competition_name
+    record.competition_status = competition["status"] or record.competition_status
+    record.judge_position = position or record.judge_position
+    return is_new
+
+
 @bp.route("/competition/import", methods=["POST"])
 @require_api_key
 def competition_import():
@@ -235,9 +279,12 @@ def competition_import():
 
     Тело запроса (JSON):
       competition_name  — название соревнования
-      judges            — [{full_name, qualification (аббревиатура), birth_date (ISO), region}, …]
+      judges            — [{full_name, qualification (аббревиатура), birth_date (ISO), region, position}, …]
+      competition_id, competition_dates, competition_start (ISO), competition_location,
+      competition_ekp, competition_status — данные для «Практики судейства» в карточке
+      каждого судьи (найденного и нового); необязательны, кроме названия.
 
-    Ответ: {matched, created}
+    Ответ: {matched, created, practice_added, practice_updated}
     """
     data = request.get_json(silent=True)
     if not data:
@@ -246,6 +293,20 @@ def competition_import():
     judges_data = data.get("judges") or []
     matched = 0
     created = 0
+    practice_added = 0
+    practice_updated = 0
+
+    event_date, _, _ = card_dates(data.get("competition_dates"), _parse_date(data.get("competition_start")))
+    competition = {
+        "event_date": event_date or None,
+        "location": (data.get("competition_location") or "").strip() or None,
+        "name": _ekp_in_name((data.get("competition_name") or "").strip(), data.get("competition_ekp")) or None,
+        "status": (data.get("competition_status") or "").strip() or None,
+    }
+    corez_id = data.get("competition_id")
+    corez_id = int(corez_id) if str(corez_id or "").isdigit() else None
+    today = date.today().strftime("%d.%m.%Y")
+    positions = {}  # judge.id -> должности в этом запросе (один судья может занимать две)
 
     for j in judges_data:
         full_name = (j.get("full_name") or "").strip()
@@ -307,8 +368,22 @@ def competition_import():
                     ))
             created += 1
 
+        position = (j.get("position") or "").strip()
+        held = positions.setdefault(judge.id, [])
+        if position and position not in held:
+            held.append(position)
+        if competition["name"] or competition["event_date"]:
+            if _upsert_practice(judge, corez_id, competition, ", ".join(held), today):
+                practice_added += 1
+            elif len(held) <= 1:
+                practice_updated += 1
+        db.session.flush()
+
     db.session.commit()
-    return jsonify({"matched": matched, "created": created})
+    return jsonify({
+        "matched": matched, "created": created,
+        "practice_added": practice_added, "practice_updated": practice_updated,
+    })
 
 
 @bp.route("/judges/search", methods=["GET"])
