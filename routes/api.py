@@ -246,10 +246,11 @@ def _last_competition_keeper(judge):
     return None
 
 
-def _upsert_practice(judge, corez_id, competition, position, today):
+def _upsert_practice(judge, corez_id, competition, position, score, today):
     """Строка «Практики судейства» для этого соревнования COREZ: создаётся,
-    а при повторной отправке обновляется (оценку и отметку «В представление»,
-    внесённые вручную, не трогает). Возвращает True, если строка новая."""
+    а при повторной отправке обновляется. Оценка берётся из COREZ, если он
+    её прислал; отметку «В представление» не трогает. Возвращает True, если
+    строка новая."""
     query = JudgeCompetitionRecord.query.filter_by(judge_id=judge.id)
     if corez_id is not None:
         record = query.filter_by(corez_competition_id=corez_id).first()
@@ -267,6 +268,7 @@ def _upsert_practice(judge, corez_id, competition, position, today):
     record.competition_name = competition["name"] or record.competition_name
     record.competition_status = competition["status"] or record.competition_status
     record.judge_position = position or record.judge_position
+    record.score = score or record.score
     return is_new
 
 
@@ -279,7 +281,8 @@ def competition_import():
 
     Тело запроса (JSON):
       competition_name  — название соревнования
-      judges            — [{full_name, qualification (аббревиатура), birth_date (ISO), region, position}, …]
+      judges            — [{full_name, qualification (аббревиатура), birth_date (ISO), region, position,
+                            score (оценка судейства: Отлично / Хорошо / …)}, …]
       competition_id, competition_dates, competition_start (ISO), competition_location,
       competition_ekp, competition_status — данные для «Практики судейства» в карточке
       каждого судьи (найденного и нового); необязательны, кроме названия.
@@ -307,6 +310,7 @@ def competition_import():
     corez_id = int(corez_id) if str(corez_id or "").isdigit() else None
     today = date.today().strftime("%d.%m.%Y")
     positions = {}  # judge.id -> должности в этом запросе (один судья может занимать две)
+    scores = {}     # judge.id -> оценка (при двух должностях — первая присланная)
 
     for j in judges_data:
         full_name = (j.get("full_name") or "").strip()
@@ -372,8 +376,9 @@ def competition_import():
         held = positions.setdefault(judge.id, [])
         if position and position not in held:
             held.append(position)
+        score = scores.setdefault(judge.id, (j.get("score") or "").strip() or None)
         if competition["name"] or competition["event_date"]:
-            if _upsert_practice(judge, corez_id, competition, ", ".join(held), today):
+            if _upsert_practice(judge, corez_id, competition, ", ".join(held), score, today):
                 practice_added += 1
             elif len(held) <= 1:
                 practice_updated += 1
